@@ -1,45 +1,64 @@
-const randomUseragent = require('random-useragent');
+const { getRandomAcceptLanguage, getRandomUserAgent } = require('./random');
 const tr = require('tor-request');
+const { sample } = require('lodash');
 const { promisify } = require('util');
-const request = promisify(tr.request);
+const request = promisify(require('request'));
+const torRequest = promisify(tr.request);
 const newTorSession = promisify(tr.newTorSession);
-
-const requestOptions = {};
-
 tr.TorControlPort.password = 'giraffe';
 
-function getRandomNumber(max, min) {
-  return Math.floor(Math.random() * (max - min + 1) + min);
+function getRandomNumber(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function getRandomUid() {
-  const max = 20000000000000000000;
-  const min = 10000000000000000000;
-  const base10 = getRandomNumber(max, min);
-  return base10.toString(16);
+function formatTime(ms) {
+  const seconds = ms / 1000;
+  const value = seconds > 60 ? seconds / 60 : seconds;
+  const unit = seconds > 60 ? 'm' : 's';
+  return { value, unit };
 }
 
-function submitVote() {
-  return request(requestOptions);
+function delayAndLog(ms) {
+  const { value, unit } = formatTime(ms);
+  console.log(`Sleeping for ${value.toFixed(1)}${unit}`);
+  return delay(ms);
 }
 
 async function run() {
   try {
-    await newTorSession();
-    const res = await submitVote();
-    console.log(res.body);
+    const randomUserAgent = getRandomUserAgent();
+    const randomUid = getRandomUid();
+    const randomAcceptLanguage = getRandomAcceptLanguage();
+    const useTor = Math.random() >= 0.5;
 
-    const ms = getRandomNumber(600000, 4000000);
-    console.log(`Sleeping for ${(ms / 1000 / 60).toFixed(1)}m`);
-    await delay(ms);
+    if (useTor) {
+      await newTorSession();
+    }
+
+    console.log(
+      JSON.stringify(
+        {
+          useTor,
+          randomUid,
+          randomUserAgent,
+          randomAcceptLanguage
+        },
+        null,
+        4
+      )
+    );
+
+    const response = useTor ? await torRequest(requestOptions) : await request(requestOptions);
+
+    await delay(delayTime * 2 / 3);
     await run();
   } catch (e) {
     console.log(e);
-    await delay(10000);
+    await delayAndLog(10000);
     run();
   }
 }
